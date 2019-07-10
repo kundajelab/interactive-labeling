@@ -1,7 +1,6 @@
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
-import plotly
 import plotly.graph_objs as go
 import numpy as np
 import pandas as pd
@@ -18,29 +17,14 @@ dict = {i: np.random.uniform(0,20,30) for i in ['X', 'Y']}
 dict['Class'] = np.random.randint(3, size=30)
 xyDf = pd.DataFrame(dict)
 
-# nbrs = NearestNeighbors(n_neighbors = 5, algorithm = 'ball_tree').fit(xyDf)
-# distances, indices = nbrs.kneighbors(xyDf)
-# print(distances)
-# print(indices)
+nbrs = NearestNeighbors(n_neighbors = 6, algorithm = 'ball_tree').fit(xyDf)
+distances, indices = nbrs.kneighbors(xyDf)
 
 colors = {
     0: 0,
     1: 120,
     2: 240
 }
-
-# groups = []
-# for label in labelDf['label'].unique():
-#     groups.append({
-#         'x':
-#         'y':
-#         'legendgroup': i,
-#         'name': i,
-#         'mode': 'markers',
-#         'marker': {
-#             'color': colors[i]
-#         }
-#     })
 
 print(xyDf)
 
@@ -55,27 +39,32 @@ app.layout = html.Div([
             value='labels',
             labelStyle={'display': 'inline-block', 'padding': '5px'}
         )
-    ],
-    style={'width': '49%'}),
-
+    ]),
     dcc.Graph(
-        id = 'main-scatter'
-    )
+        id = 'main-scatter',
+    ),
+    html.Div(id='hidden-div', style={'display':'none'})
 ])
+
 
 @app.callback(Output('main-scatter', 'figure'),
               [Input('color-options', 'value'),
-               Input('main-scatter', 'clickData')])
-def updateGraph(colorOption, clickData):
-    if(colorOption == 'gradient'):
-        if clickData:
-            print(clickData)
-            for click in clickData['points']:
-                print (click)
-                changeColors(click['x'], click['y'])
+               Input('main-scatter', 'clickData')],
+              [State('main-scatter', 'figure')])
+def updateGraph(colorOption, clickData, figureData):
+    if colorOption == 'gradient':
         clickmode = 'event+select'
+        if colorOption:
+            colorOption = figureData['data'][0]['marker']['color']
+        if clickData:
+            for point in clickData['points']:
+                index = point['pointIndex']
+                if(colorOption[index] == 'gray'):
+                    colorOption[index] = 'hsl({},60,70)'.format(colors[xyDf['Class'][index]])
+                else:
+                    colorOption[index] = 'gray'
     else:
-        colorOption = 'hsl(210, 0, 50)'
+        colorOption = ['gray'] * xyDf.size
         clickmode = 'none'
 
     return {
@@ -87,6 +76,7 @@ def updateGraph(colorOption, clickData):
             'mode': 'markers+text',
             'marker': {
                 'color': colorOption,
+                'colorscale': 'Viridis',
                 'size': 12,
                 'line': {
                     'color': 'rgb(0, 116, 217)',
@@ -102,17 +92,27 @@ def updateGraph(colorOption, clickData):
             hovermode='closest',
             clickmode=clickmode
         )
-
     }
 
-def changeColors (X, Y):
-    plotly.addTraces(main-scatter,{
-        x: X,
-        y: Y,
-        type: 'scatter',
-        mode: 'markers',
-        marker: {'color': 'blue'},
-    })
+
+@app.callback(Output('hidden-div', 'children'),
+              [Input('main-scatter', 'clickData')],
+              [State('hidden-div', 'children')])
+def knnColoring(clickData, pastData):
+    activatedPoints = []
+    if pastData and pastData != ' ':
+        activatedPoints = list(map(int, pastData.split(' ')))
+
+    if clickData:
+        clickIndex = clickData['points'][0]['pointIndex']
+        if clickIndex in activatedPoints:
+            activatedPoints.remove(clickIndex)
+        else:
+            activatedPoints.append(clickIndex)
+
+    activatedString = ' '.join(str(i) for i in activatedPoints)
+    return (activatedString)
+
 
 if __name__ == '__main__':
     app.run_server(debug=True)
